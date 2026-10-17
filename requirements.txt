@@ -4,3 +4,4 @@ numpy
 matplotlib
 tabulate
 colorama
+scipy

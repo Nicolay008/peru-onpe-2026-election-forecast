@@ -157,11 +157,6 @@ def calcular_proyeccion():
         cands = api_participantes(id_eleccion, ubigeo=ubigeo)
         tots  = api_totales(id_eleccion, ubigeo=ubigeo)
 
-        if region == "Cusco":
-            print("\n====================")
-            print("DEBUG CUSCO")
-            print(tots)
-            print("====================\n")
 
         if not cands:
             continue
@@ -199,37 +194,11 @@ def calcular_proyeccion():
     pend_ext_b = pen_ext * vpa_ext * pct_ext_b
     proy_a += pend_ext_a
     proy_b += pend_ext_b
-
-    """
-    Aqui van los pints temporales
-    """
-    print("\nDEBUG EXTERIOR")
-    print(f"va_ext = {va_ext:,}")
-    print(f"vb_ext = {vb_ext:,}")
-    print(f"pen_ext = {pen_ext:,}")
-    print(f"vpa_ext = {vpa_ext:.2f}")
-
-    pct_ext_a = va_ext / (va_ext + vb_ext)
-    pct_ext_b = vb_ext / (va_ext + vb_ext)
-
-    print(f"pct_ext_a = {pct_ext_a:.6f}")
-    print(f"pct_ext_b = {pct_ext_b:.6f}")
-
-    pend_ext_a = pen_ext * vpa_ext * pct_ext_a
-    pend_ext_b = pen_ext * vpa_ext * pct_ext_b
-
-    print(f"pend_ext_a = {pend_ext_a:,.0f}")
-    print(f"pend_ext_b = {pend_ext_b:,.0f}")
-    print(f"total proyectado = {pend_ext_a + pend_ext_b:,.0f}")
-
-
-    """
-    Aqui continua el code normal
-    """
-
+    
     print(f"\n  {'─'*58}")
     print(f"  {'✈ Exterior':<18} {av_ext:>5.1f}% {pen_ext:>6,} {vpa_ext:>7.0f} "
           f"{pend_ext_a:>+10,.0f} {pend_ext_b:>+10,.0f}")
+
 
     # ── Resultado final ──────────────────────────────────────────────
     total_proy = proy_a + proy_b

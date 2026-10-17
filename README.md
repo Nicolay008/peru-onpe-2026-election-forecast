@@ -1,55 +1,77 @@
 # Proyección electoral ONPE — Segunda Vuelta Perú 2026
 
-Herramienta en Python que consulta en tiempo real la API pública de resultados de la ONPE durante el conteo de la segunda vuelta presidencial 2026, analiza los resultados por región y macrorregión, y proyecta el resultado final de las regiones cuyo conteo aún no estaba completo.
+Conjunto de herramientas en Python para seguir en tiempo real el conteo de la segunda vuelta presidencial peruana 2026 a partir de la API pública de resultados de la ONPE, proyectar el resultado final y estimar cuánto podía cambiar ese resultado según cómo se resolvieran las actas enviadas al Jurado Electoral Especial (JEE).
 
-![Panel de gráficos generado por el script](img/onpe_graficos_130806.png)
+![Panel de gráficos generado por el script principal](img/onpe_graficos_130806.png)
 
-## Qué hace
+## Componentes
 
-El script principal, `onpe_analisis_electoral.py`, realiza en cada ejecución:
+El proyecto tiene cuatro scripts que cubren distintas etapas del análisis:
 
-1. **Detecta el proceso electoral activo** consultando la API de la ONPE.
-2. **Obtiene los resultados nacionales y del extranjero** por separado: votos válidos, porcentajes, avance de actas y actas pendientes.
-3. **Consulta los 25 departamentos** (incluido el Callao) y los agrupa en cinco macrorregiones: Norte, Centro, Sur, Oriente y Lima Metropolitana.
-4. **Proyecta el resultado** de cada región con conteo incompleto.
-5. **Guarda un snapshot** en un historial CSV, lo que permite seguir la evolución del conteo en el tiempo.
-6. **Genera un panel de cuatro gráficos**: evolución del porcentaje de votos, avance del conteo, resultados por macrorregión y actas impugnadas por región.
+| Script | Qué responde |
+|---|---|
+| `onpe_analisis_electoral.py` | ¿Cómo va el conteo por región y macrorregión, y cómo evoluciona en el tiempo? |
+| `onpe_proyeccion.py` | ¿Cuál será el resultado final si las actas pendientes votan como las ya contadas? ¿Qué tan sensible es al voto del exterior? |
+| `onpe_impugnados.py` | ¿Qué porcentaje de las actas enviadas al JEE tendría que anularse para invertir el resultado? |
+| `onpe_probabilidad.py` | Con tasas de anulación basadas en elecciones anteriores, ¿qué probabilidad hay de que el resultado se invierta? |
 
-Además, muestra en la terminal tablas formateadas con resultados por región y macrorregión, quién lidera y las regiones donde la diferencia es muy estrecha.
+### 1. Monitoreo regional — `onpe_analisis_electoral.py`
 
-## Método de proyección
+En cada ejecución:
 
-Para cada región con más del 10 % de actas contabilizadas, los votos finales de cada candidato se estiman como:
+1. Detecta el proceso electoral activo en la API.
+2. Obtiene los resultados nacionales y del extranjero por separado.
+3. Consulta los 25 departamentos (incluido el Callao) y los agrupa en cinco macrorregiones: Norte, Centro, Sur, Oriente y Lima Metropolitana.
+4. Proyecta los votos de cada región con avance entre 10 % y 99,5 %: `votos_actuales / (avance / 100)`.
+5. Guarda un snapshot en el historial para seguir la evolución del conteo.
+6. Genera un panel de cuatro gráficos: evolución del porcentaje de votos, avance del conteo, resultados por macrorregión y actas impugnadas por región.
+
+Puede ejecutarse en modo continuo, actualizando cada cierto intervalo.
+
+### 2. Proyección ponderada y sensibilidad — `onpe_proyeccion.py`
+
+Para cada región estima los votos que faltan contar como:
 
 ```
-votos_proyectados = votos_actuales / (avance / 100)
+votos_pendientes = actas_pendientes × votos_válidos_por_acta_de_la_región × proporción_de_cada_candidato
 ```
 
-Es decir, se asume que las actas que faltan contar en esa región tendrán la misma distribución de votos que las ya contabilizadas. Las regiones por debajo del 10 % de avance no se proyectan porque la muestra es demasiado pequeña.
+Usar los votos por acta de cada región, en lugar de un promedio nacional, evita que regiones con mesas más grandes o más pequeñas distorsionen la proyección. El mismo cálculo se aplica al voto del exterior.
+
+Incluye un **análisis de sensibilidad** que recalcula el resultado final suponiendo distintos porcentajes (del 50 % al 70 %) para uno de los candidatos en las actas pendientes del exterior.
+
+### 3. Punto de quiebre por actas en el JEE — `onpe_impugnados.py`
+
+Estima, por región, cuántos votos hay en las actas enviadas al JEE (actas × votos por acta) y cuál es la ventaja neta de cada candidato en ellas. Con eso calcula:
+
+- El resultado si el JEE anulara entre el 1 % y el 30 % de esas actas, de forma proporcional en cada región.
+- El **porcentaje exacto de anulación** que invertiría el resultado.
+- Un análisis específico de Lima, que concentraba la mayor parte de las actas observadas.
+
+### 4. Simulación Monte Carlo — `onpe_probabilidad.py`
+
+Ejecuta 100 000 simulaciones en las que la tasa de anulación de actas se modela con una distribución Beta, calibrada en cuatro escenarios construidos a partir de las segundas vueltas de 2011, 2016 y 2021. Considera dos supuestos:
+
+- **Neutral:** las anulaciones afectan a todas las regiones por igual.
+- **Lima con más impugnaciones:** Lima tiene una tasa de anulación 50 % mayor que el resto.
+
+Reporta la probabilidad de que cada candidato gane, los percentiles de la diferencia final, un intervalo de confianza del 95 % y un histograma de la distribución simulada. Usa los datos del corte del 11/06/2026 a las 13:20.
 
 ## Limitaciones
 
-- **La proyección asume que las actas pendientes son homogéneas con las contadas.** En la práctica, las actas de zonas rurales o alejadas suelen llegar más tarde y pueden votar distinto, lo que introduce un sesgo que este método no corrige.
-- **El voto del extranjero no se proyecta**, solo se muestra el avance actual.
-- **Las actas impugnadas se reportan, pero no se modelan**: no se estima cómo podrían cambiar el resultado.
-- **La proyección es puntual, sin intervalos de confianza.**
-- **Depende de endpoints no documentados de la ONPE**, que estaban activos durante el conteo y pueden haber cambiado o dejado de funcionar.
+- **Homogeneidad dentro de cada región.** Ambas proyecciones suponen que las actas pendientes de una región votan igual que las ya contadas. Las actas de zonas rurales o alejadas suelen llegar más tarde y pueden votar distinto.
+- **Votos por acta promedio.** Se usa el promedio regional de votos válidos por acta, aunque el tamaño de las mesas varía dentro de cada región.
+- **Calibración de la simulación.** Las tasas históricas de anulación están expresadas sobre el total de actas de cada elección, pero el modelo las aplica solo sobre las actas en revisión del JEE, que son un subconjunto. Esto probablemente subestima la tasa de anulación dentro de ese grupo.
+- **Anulaciones proporcionales.** El análisis de punto de quiebre y la simulación suponen que las actas anuladas tienen la misma distribución de votos que el resto de su región.
+- **Datos fijos en la simulación.** `onpe_probabilidad.py` usa valores de un momento concreto del conteo, no consulta la API.
+- **Endpoints no documentados.** La API de la ONPE no es pública oficialmente; los endpoints estaban activos durante el conteo y pueden haber cambiado.
 
 ## Datos incluidos
 
 - `data/onpe_historial.csv`: evolución del resultado nacional, una fila por consulta, con marca de tiempo completa.
-- `data/snapshots/onpe_regional_HHMMSS.csv`: resultados por departamento en cada consulta. El nombre del archivo indica la hora de la captura.
+- `data/snapshots/onpe_regional_HHMMSS.csv`: resultados por departamento en cada consulta. El nombre indica la hora de la captura.
 
-Estos datos se conservan porque la API solo muestra el estado actual del conteo: los snapshots son el único registro de cómo fue evolucionando.
-
-## Estructura
-
-| Archivo | Descripción |
-|---|---|
-| `onpe_analisis_electoral.py` | Script principal: consulta, análisis regional, proyección, historial y gráficos |
-| `onpe_proyeccion.py` | Módulo de proyección |
-| `onpe_probabilidad.py` | Estimación probabilística del resultado |
-| `onpe_impugnados.py` | Análisis de actas impugnadas |
+La API solo muestra el estado actual del conteo, así que estos snapshots son el único registro de cómo fue evolucionando.
 
 ## Instalación y uso
 
@@ -58,23 +80,25 @@ pip install -r requirements.txt
 ```
 
 ```bash
-# Una sola consulta
+# Monitoreo regional: una consulta, en modo continuo o filtrando una región
 python onpe_analisis_electoral.py
-
-# Actualizar automáticamente cada 90 segundos
 python onpe_analisis_electoral.py --intervalo 90
+python onpe_analisis_electoral.py --region Junín --sin-graficos
 
-# Filtrar una región
-python onpe_analisis_electoral.py --region Junín
+# Proyección ponderada con sensibilidad del exterior
+python onpe_proyeccion.py
 
-# Sin generar gráficos
-python onpe_analisis_electoral.py --sin-graficos
+# Punto de quiebre por actas en el JEE
+python onpe_impugnados.py
+
+# Simulación Monte Carlo
+python onpe_probabilidad.py
 ```
 
 ## Tecnologías
 
-Python · pandas · NumPy · Matplotlib · curl_cffi · tabulate · colorama
+Python · pandas · NumPy · SciPy · Matplotlib · curl_cffi · tabulate · colorama
 
 ## Fuente de datos
 
-Resultados oficiales publicados por la [ONPE](https://resultadosegundavuelta.onpe.gob.pe/) (Oficina Nacional de Procesos Electorales del Perú). Este proyecto es independiente y no está afiliado a la ONPE.
+Resultados oficiales publicados por la [ONPE](https://resultadosegundavuelta.onpe.gob.pe/) (Oficina Nacional de Procesos Electorales del Perú). Este proyecto es independiente y no está afiliado a la ONPE ni a ninguna organización política.
